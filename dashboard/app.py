@@ -16,5 +16,6 @@ pg = st.navigation([
     st.Page("pages/anomalies.py",             title="Аномалии"),
     st.Page("pages/comparison.py",            title="Было / Стало"),
     st.Page("pages/details.py",               title="Детали и выгрузка"),
+    st.Page("pages/ml_model.py",              title="ML-модель"),
 ])
 pg.run()

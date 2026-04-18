@@ -18,6 +18,7 @@ def _find_data_dir() -> Path:
 DATA_DIR = _find_data_dir()
 RAW_PATH = DATA_DIR / "hakaton.csv"
 CLEAN_PATH = DATA_DIR / "hakaton_analyzed.csv"
+ML_PATH = DATA_DIR / "dataset_with_model_scores.csv"
 
 
 # ----------------------------- ЗАГРУЗКА ----------------------------- #
@@ -51,6 +52,17 @@ def load_clean() -> pd.DataFrame:
     df["flag_parent_child_id_match"] = df["id_equals_guard_id"].astype(bool)
 
     df["child_key"] = _child_key(df)
+    return df
+
+
+@st.cache_data(show_spinner="Загружаю результаты ML-модели…")
+def load_ml_results() -> pd.DataFrame | None:
+    """Датасет с оценками Isolation Forest (dataset_with_model_scores.csv)."""
+    if not ML_PATH.exists():
+        return None
+    df = pd.read_csv(ML_PATH, low_memory=False)
+    for col in ["test_date", "bdate", "guard_bdate"]:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
 
 
