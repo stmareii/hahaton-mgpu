@@ -12,10 +12,10 @@ st.title("Детали и выгрузка")
 
 source = st.radio(
     "Источник данных",
-    ["Очищенный (cleaned_with_flags.csv)", "Исходный (hakaton.csv)"],
+    ["Проанализированный (hakaton_analyzed.csv)", "Исходный (hakaton.csv)"],
     horizontal=True,
 )
-df = load_clean() if source.startswith("Очищенный") else load_raw()
+df = load_clean() if source.startswith("Проанализированный") else load_raw()
 
 # Фильтры
 with st.expander("Фильтры", expanded=True):

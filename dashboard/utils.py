@@ -10,14 +10,14 @@ import streamlit as st
 def _find_data_dir() -> Path:
     here = Path(__file__).resolve().parent
     for candidate in (here / "data", here.parent / "data"):
-        if (candidate / "cleaned_with_flags.csv").exists():
+        if (candidate / "hakaton_analyzed.csv").exists():
             return candidate
     return here / "data"
 
 
 DATA_DIR = _find_data_dir()
 RAW_PATH = DATA_DIR / "hakaton.csv"
-CLEAN_PATH = DATA_DIR / "cleaned_with_flags.csv"
+CLEAN_PATH = DATA_DIR / "hakaton_analyzed.csv"
 
 
 # ----------------------------- ЗАГРУЗКА ----------------------------- #
@@ -34,7 +34,7 @@ def load_raw() -> pd.DataFrame:
 
 @st.cache_data(show_spinner="Загружаю очищенные данные…")
 def load_clean() -> pd.DataFrame:
-    """Очищенный датасет из analysis.ipynb (cleaned_with_flags.csv)."""
+    """Очищенный датасет из analysis.ipynb (hakaton_analyzed.csv)."""
     df = pd.read_csv(CLEAN_PATH, low_memory=False)
     df = df.drop(columns=[c for c in df.columns if c.startswith("Unnamed")], errors="ignore")
     for col in ["test_date", "bdate", "guard_bdate"]:
@@ -42,7 +42,7 @@ def load_clean() -> pd.DataFrame:
     df["class"] = pd.to_numeric(df["class"], errors="coerce").astype("Int64")
     df["variant"] = pd.to_numeric(df["variant"], errors="coerce")
 
-    # Алиасы флагов: имена из analysis.ipynb → имена которые ожидает дашборд
+    # Алиасы флагов: имена из analysis.ipynb ---> имена которые ожидает дашборд
     id_numeric = pd.to_numeric(df["id_doc"], errors="coerce")
     df["flag_suspicious_id"] = (id_numeric < 0) | id_numeric.isna()
     df["flag_frequency_violation"] = df["freq_violation"].astype(bool)
@@ -55,7 +55,7 @@ def load_clean() -> pd.DataFrame:
 
 
 def _child_key(df: pd.DataFrame) -> pd.Series:
-    """Составной ключ ребёнка: ФИО + bdate (без id_doc — он ненадёжен)."""
+    """Составной ключ ребёнка: ФИО + bdate (без id_doc - он ненадёжен)."""
     return (
         df["last_name"].fillna("").str.strip().str.upper() + "|" +
         df["first_name"].fillna("").str.strip().str.upper() + "|" +
@@ -99,13 +99,13 @@ def violation_summary(df_with_intervals: pd.DataFrame) -> dict:
 def detect_anomalies(clean: pd.DataFrame, raw: pd.DataFrame) -> dict:
     """
     Возвращает словарь {имя_аномалии: DataFrame_подозрительных_строк}.
-    Флаги берутся напрямую из cleaned_with_flags.csv (analysis.ipynb).
+    Флаги берутся напрямую из hakaton_analyzed.csv (analysis.ipynb).
     """
     out = {}
 
-    # Флаги из analysis.ipynb — порядок соответствует anomalies.md
+    # Флаги из analysis.ipynb - порядок соответствует anomalies.md
     flag_map = [
-        ("multi_class",            "Один ребёнок — разные классы"),
+        ("multi_class",            "Один ребёнок - разные классы"),
         ("freq_violation",         "Нарушение частоты (< 90 дней)"),
         ("same_day_test",          "Тест написан несколько раз в один день"),
         ("age_class_mismatch",     "Возраст не соответствует классу"),
@@ -126,7 +126,7 @@ def detect_anomalies(clean: pd.DataFrame, raw: pd.DataFrame) -> dict:
         if col in clean.columns:
             out[label] = clean[clean[col].astype(bool)]
 
-    # ОГРН с несколькими названиями — только из исходника (нет флага в clean)
+    # ОГРН с несколькими названиями - только из исходника (нет флага в clean)
     ogrn_names = raw.groupby("ogrn_naprav")["name_naprav"].transform("nunique")
     out["ОГРН направ. несколько названий"] = (
         raw[ogrn_names > 1][["ogrn_naprav", "name_naprav"]]

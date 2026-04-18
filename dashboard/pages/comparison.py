@@ -1,4 +1,4 @@
-"""Страница: сравнение было/стало (hakaton.csv → clean_final.csv из cleaning.ipynb)."""
+"""Страница: сравнение было/стало (hakaton.csv ---> hakaton_cleaned.csv из cleaning.ipynb)."""
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -10,11 +10,11 @@ import plotly.express as px
 from utils import load_raw, DATA_DIR, fmt_int
 
 st.title("Было / Стало")
-st.caption("Сравнение исходного датасета с результатом очистки cleaning.ipynb")
+st.caption("Сравнение исходного датасета (hakaton.csv) с результатом очистки (hakaton_cleaned.csv)")
 
-FINAL_PATH = DATA_DIR / "clean_final.csv"
+FINAL_PATH = DATA_DIR / "hakaton_cleaned.csv"
 
-@st.cache_data(show_spinner="Загружаю clean_final.csv…")
+@st.cache_data(show_spinner="Загружаю hakaton_cleaned.csv…")
 def load_final() -> pd.DataFrame:
     df = pd.read_csv(FINAL_PATH, low_memory=False)
     for col in ["test_date", "bdate", "guard_bdate"]:
@@ -25,7 +25,7 @@ def load_final() -> pd.DataFrame:
 
 if not FINAL_PATH.exists():
     st.warning(
-        "Файл `data/clean_final.csv` не найден. "
+        "Файл `data/hakaton_cleaned.csv` не найден. "
         "Запусти все ячейки `cleaning.ipynb` чтобы его сгенерировать."
     )
     st.stop()
@@ -47,7 +47,7 @@ c2.metric(
 c3.metric("Уникальных детей (исходно)", fmt_int(raw["child_key"].nunique()))
 c4.metric(
     "Уникальных детей (после)",
-    fmt_int(final["person_id"].nunique()) if "person_id" in final.columns else "—",
+    fmt_int(final["person_id"].nunique()) if "person_id" in final.columns else "-",
 )
 
 st.divider()
@@ -80,10 +80,10 @@ st.dataframe(changes, use_container_width=True, hide_index=True)
 
 st.markdown("""
 **Без удалений строк (нормализация и исправления):**
-- `id_doc`: убраны префиксы №, N, − → записи одного ребёнка объединяются корректно
+- `id_doc`: убраны префиксы №, N, − ---> записи одного ребёнка объединяются корректно
 - `variant`: нестандартные форматы приведены к числовому коду
-- `class = "2-5"` → `"3"`
-- Исправлены даты рождения 4 детей с некорректным годом (2025 → реальный)
+- `class = "2-5"` ---> `"3"`
+- Исправлены даты рождения 4 детей с некорректным годом (2025 ---> реальный)
 - Исправлены 3 записи где `bdate == guard_bdate`
 - Пустые `id_doc` заполнены по совпадению ФИО+ДР или новым сгенерированным id
 """)
@@ -149,7 +149,7 @@ if anomaly_cols:
     anom_df["% от датасета"] = (anom_df["Записей"] / len(final) * 100).round(2)
     anom_df = anom_df.sort_values("Записей", ascending=False).reset_index(drop=True)
 
-    # Итоговая строка — уникальные записи хотя бы с одной аномалией
+    # Итоговая строка - уникальные записи хотя бы с одной аномалией
     total_with_anomaly = int(final[anomaly_cols].any(axis=1).sum())
     total_pct = round(total_with_anomaly / len(final) * 100, 2)
     totals = pd.DataFrame([{

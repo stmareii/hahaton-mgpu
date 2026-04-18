@@ -87,7 +87,3 @@ fig = px.area(
 fig.update_layout(height=280, margin=dict(t=10, b=0, l=0, r=0),
                   xaxis_title=None, yaxis_title="Тестов в неделю")
 st.plotly_chart(fig, use_container_width=True)
-
-st.info(
-    "В левом меню: **Нарушения частоты**, **Аномалии**, **Было / Стало**, **Детали / Выгрузка**."
-)
