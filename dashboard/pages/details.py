@@ -8,12 +8,11 @@ import pandas as pd
 
 from utils import load_clean, load_raw, compute_intervals, fmt_int
 
-st.set_page_config(page_title="Детали", page_icon="📋", layout="wide")
 st.title("Детали и выгрузка")
 
 source = st.radio(
     "Источник данных",
-    ["Очищенный (cleaned.csv)", "Исходный (hakaton.csv)"],
+    ["Очищенный (cleaned_with_flags.csv)", "Исходный (hakaton.csv)"],
     horizontal=True,
 )
 df = load_clean() if source.startswith("Очищенный") else load_raw()

@@ -8,21 +8,16 @@ import numpy as np
 import streamlit as st
 
 def _find_data_dir() -> Path:
-    """
-    Ищем data/ сначала рядом с utils.py (dashboard/data/),
-    потом на уровень выше (корень проекта: hahaton-mgpu/data/).
-    """
     here = Path(__file__).resolve().parent
     for candidate in (here / "data", here.parent / "data"):
-        if (candidate / "cleaned.csv").exists():
+        if (candidate / "cleaned_with_flags.csv").exists():
             return candidate
-    # ничего не нашли - вернём дефолт, pandas сам покажет понятную ошибку
     return here / "data"
 
 
 DATA_DIR = _find_data_dir()
 RAW_PATH = DATA_DIR / "hakaton.csv"
-CLEAN_PATH = DATA_DIR / "cleaned.csv"
+CLEAN_PATH = DATA_DIR / "cleaned_with_flags.csv"
 
 
 # ----------------------------- ЗАГРУЗКА ----------------------------- #
@@ -39,16 +34,23 @@ def load_raw() -> pd.DataFrame:
 
 @st.cache_data(show_spinner="Загружаю очищенные данные…")
 def load_clean() -> pd.DataFrame:
-    """Очищенный датасет из prepare_data.ipynb (cleaned.csv)."""
-    df = pd.read_csv(CLEAN_PATH)
+    """Очищенный датасет из analysis.ipynb (cleaned_with_flags.csv)."""
+    df = pd.read_csv(CLEAN_PATH, low_memory=False)
     df = df.drop(columns=[c for c in df.columns if c.startswith("Unnamed")], errors="ignore")
     for col in ["test_date", "bdate", "guard_bdate"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
     df["class"] = pd.to_numeric(df["class"], errors="coerce").astype("Int64")
     df["variant"] = pd.to_numeric(df["variant"], errors="coerce")
-    for col in [c for c in df.columns if c.startswith("flag_")]:
-        df[col] = df[col].astype(bool)
-    # child_key уже сохранён в CSV — используем его напрямую
+
+    # Алиасы флагов: имена из analysis.ipynb → имена которые ожидает дашборд
+    id_numeric = pd.to_numeric(df["id_doc"], errors="coerce")
+    df["flag_suspicious_id"] = (id_numeric < 0) | id_numeric.isna()
+    df["flag_frequency_violation"] = df["freq_violation"].astype(bool)
+    df["flag_age_anomaly"] = (df["child_too_young"] | df["child_too_old"]).astype(bool)
+    df["flag_parent_too_young"] = df["guard_too_young_parent"].astype(bool)
+    df["flag_parent_child_id_match"] = df["id_equals_guard_id"].astype(bool)
+
+    df["child_key"] = _child_key(df)
     return df
 
 
@@ -97,79 +99,44 @@ def violation_summary(df_with_intervals: pd.DataFrame) -> dict:
 def detect_anomalies(clean: pd.DataFrame, raw: pd.DataFrame) -> dict:
     """
     Возвращает словарь {имя_аномалии: DataFrame_подозрительных_строк}.
-    Каждую можно показать в таблице с кнопкой выгрузки.
+    Флаги берутся напрямую из cleaned_with_flags.csv (analysis.ipynb).
     """
     out = {}
 
-    # 1. Подозрительный id_doc (флаг из cleaned.csv: отрицательный или нечисловой)
-    out["id_doc подозрительный"] = clean[clean["flag_suspicious_id"]]
+    # Флаги из analysis.ipynb — порядок соответствует anomalies.md
+    flag_map = [
+        ("multi_class",            "Один ребёнок — разные классы"),
+        ("freq_violation",         "Нарушение частоты (< 90 дней)"),
+        ("same_day_test",          "Тест написан несколько раз в один день"),
+        ("age_class_mismatch",     "Возраст не соответствует классу"),
+        ("id_equals_guard_id",     "id_doc ребёнка совпадает с id родителя"),
+        ("id_doc_missing",         "Пустой id_doc"),
+        ("guard_id_missing",       "Пустой guard_id_doc"),
+        ("variant_invalid",        "Некорректный вариант теста"),
+        ("guard_too_young_parent", "Родитель слишком молод (разница < 18 лет)"),
+        ("child_too_young",        "Ребёнок слишком юный (< 5 лет)"),
+        ("child_too_old",          "Ребёнок слишком старый (> 20 лет)"),
+        ("bdate_equals_guard",     "Дата рождения ребёнка совпадает с датой родителя"),
+        ("class_invalid",          "Некорректный класс"),
+        ("test_before_birth",      "Тест написан до рождения ребёнка"),
+        ("ogrn_naprav_bad",        "Некорректный ОГРН направившей организации"),
+    ]
 
-    # 2. id_doc ребёнка совпадает с id опекуна (флаг из cleaned.csv)
-    out["id_doc ребёнка совпадает с опекуном"] = clean[clean["flag_parent_child_id_match"]]
+    for col, label in flag_map:
+        if col in clean.columns:
+            out[label] = clean[clean[col].astype(bool)]
 
-    # 3. Дубли (ребёнок, дата) — только в исходнике
-    dup_mask = raw.duplicated(subset=["child_key", "test_date"], keep=False)
-    out["Дубли тестов в один день"] = raw[dup_mask].sort_values(["child_key", "test_date"])
-
-    # 4. ОГРН с несколькими названиями школ
+    # ОГРН с несколькими названиями — только из исходника (нет флага в clean)
     ogrn_names = raw.groupby("ogrn_naprav")["name_naprav"].transform("nunique")
     out["ОГРН направ. несколько названий"] = (
         raw[ogrn_names > 1][["ogrn_naprav", "name_naprav"]]
-        .drop_duplicates()
-        .sort_values("ogrn_naprav")
+        .drop_duplicates().sort_values("ogrn_naprav")
     )
     ogrn_names2 = raw.groupby("ogrn_area")["name_area"].transform("nunique")
     out["ОГРН площадка несколько названий"] = (
         raw[ogrn_names2 > 1][["ogrn_area", "name_area"]]
-        .drop_duplicates()
-        .sort_values("ogrn_area")
+        .drop_duplicates().sort_values("ogrn_area")
     )
-
-    # 5. id_doc у разных ФИО
-    valid = clean[clean["id_doc"].notna()]
-    key_by_id = valid.groupby("id_doc").apply(
-        lambda g: g[["last_name", "first_name", "bdate"]].drop_duplicates().shape[0],
-        include_groups=False,
-    )
-    bad_ids = key_by_id[key_by_id > 1].index
-    out["Один id_doc разные ФИО"] = valid[valid["id_doc"].isin(bad_ids)] \
-        .sort_values(["id_doc", "last_name"])
-
-    # 6. Более 2 опекунов
-    guards = clean.groupby("child_key").apply(
-        lambda g: g[["guard_last_name", "guard_first_name", "guard_id_doc"]].drop_duplicates().shape[0],
-        include_groups=False,
-    )
-    many_guards_keys = guards[guards > 2].index
-    out["Больше 2-ух опекунов"] = clean[clean["child_key"].isin(many_guards_keys)] \
-        .sort_values("child_key")
-
-    # 7. Возраст аномальный (флаг из cleaned.csv: < 6 или > 18 лет)
-    out["Аномальный возраст"] = clean[clean["flag_age_anomaly"]]
-
-    # 8. Возраст не соответствует классу
-    age = clean["age_at_test"]
-    def class_ok(row_class, row_age):
-        try:
-            c = int(row_class)
-        except (ValueError, TypeError):
-            return True
-        if pd.isna(row_age):
-            return True
-        return (c + 4) <= row_age <= (c + 9)
-
-    ok_mask = np.array([class_ok(c, a) for c, a in zip(clean["class"], age)])
-    out["Возраст не соответствует классу"] = clean[~ok_mask]
-
-    # 9. Опекун моложе ребёнка
-    out["Опекун моложе ребёнка"] = clean[
-        clean["guard_bdate"].notna()
-        & clean["bdate"].notna()
-        & (clean["guard_bdate"] >= clean["bdate"])
-    ]
-
-    # 10. Опекун слишком молод (флаг из cleaned.csv: разница < 14 лет)
-    out["Опекун слишком молод"] = clean[clean["flag_parent_too_young"]]
 
     return out
 
