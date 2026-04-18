@@ -29,14 +29,14 @@ c4.metric("Площадок", fmt_int(clean["ogrn_area"].nunique()))
 c5, c6, c7, c8 = st.columns(4)
 c5.metric(
     "Период",
-    f"{clean['test_date'].min():%d.%m.%Y}",
-    f"до {clean['test_date'].max():%d.%m.%Y}",
+    f"{clean["test_date"].min():%d.%m.%Y}",
+    f"до {clean["test_date"].max():%d.%m.%Y}",
     delta_color="off",
 )
 c6.metric(
     "Нарушений частоты",
     fmt_int(int(intervals["is_violation"].sum())),
-    f"{intervals['is_violation'].sum() / len(intervals) * 100:.2f}% от всех тестов",
+    f"{intervals["is_violation"].sum() / len(intervals) * 100:.2f}% от всех тестов",
     delta_color="inverse",
 )
 c7.metric(

@@ -5,7 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.express as px  # используется для гистограммы
 
 from utils import load_clean, load_raw, compute_intervals, violation_summary, fmt_int, MIN_INTERVAL_DAYS
 
@@ -23,7 +23,7 @@ c1.metric("Нарушений всего", fmt_int(summary["violation_rows"]))
 c2.metric("Детей с нарушениями", fmt_int(summary["violation_children"]))
 c3.metric("Тестов в один день", fmt_int(summary["same_day_rows"]),
           "явная техошибка", delta_color="inverse")
-c4.metric("Медианный интервал", f"{summary['median_interval_violations']:.0f} дн.")
+c4.metric("Медианный интервал", f"{summary["median_interval_violations"]:.0f} дн.")
 
 st.divider()
 
@@ -46,42 +46,29 @@ st.plotly_chart(fig, use_container_width=True)
 st.divider()
 
 # ---------- Топы школ / площадок ---------- #
-left, right = st.columns(2)
+def _most_common_name(series):
+    return series.value_counts().index[0]
 
-# Топ школ-направивших по нарушениям
-# Подтягиваем названия из raw
-name_map = (raw[["ogrn_naprav", "name_naprav"]]
-            .drop_duplicates("ogrn_naprav")
-            .set_index("ogrn_naprav")["name_naprav"])
-area_map = (raw[["ogrn_area", "name_area"]]
-            .drop_duplicates("ogrn_area")
-            .set_index("ogrn_area")["name_area"])
+name_map = raw.groupby("ogrn_naprav")["name_naprav"].agg(_most_common_name)
+area_map = raw.groupby("ogrn_area")["name_area"].agg(_most_common_name)
 
 viol = intervals[intervals["is_violation"]]
 
-with left:
-    st.subheader("Топ-10 направивших школ по нарушениям")
-    top_n = viol["ogrn_naprav"].value_counts().head(10).reset_index()
-    top_n.columns = ["ogrn_naprav", "violations"]
-    top_n["Название"] = top_n["ogrn_naprav"].map(name_map).fillna("-").str[:80]
-    fig = px.bar(top_n, x="violations", y="Название", orientation="h",
-                 color_discrete_sequence=["#E63946"])
-    fig.update_layout(height=380, margin=dict(t=10, b=0),
-                      yaxis=dict(autorange="reversed"),
-                      yaxis_title=None, xaxis_title="Нарушений")
-    st.plotly_chart(fig, use_container_width=True)
+st.subheader("Топ-10 направивших школ по нарушениям")
+top_n = viol["ogrn_naprav"].value_counts().head(10).reset_index()
+top_n.columns = ["ogrn_naprav", "violations"]
+top_n["ОГРН"] = top_n["ogrn_naprav"].astype(str)
+top_n["Название"] = top_n["ogrn_naprav"].apply(lambda x: name_map.get(str(x), "—"))
+top_n["Нарушений"] = top_n["violations"]
+st.dataframe(top_n[["Название", "ОГРН", "Нарушений"]], use_container_width=True, hide_index=True)
 
-with right:
-    st.subheader("Топ-10 площадок по нарушениям")
-    top_a = viol["ogrn_area"].value_counts().head(10).reset_index()
-    top_a.columns = ["ogrn_area", "violations"]
-    top_a["Название"] = top_a["ogrn_area"].map(area_map).fillna("-").str[:80]
-    fig = px.bar(top_a, x="violations", y="Название", orientation="h",
-                 color_discrete_sequence=["#E63946"])
-    fig.update_layout(height=380, margin=dict(t=10, b=0),
-                      yaxis=dict(autorange="reversed"),
-                      yaxis_title=None, xaxis_title="Нарушений")
-    st.plotly_chart(fig, use_container_width=True)
+st.subheader("Топ-10 площадок по нарушениям")
+top_a = viol["ogrn_area"].value_counts().head(10).reset_index()
+top_a.columns = ["ogrn_area", "violations"]
+top_a["ОГРН"] = top_a["ogrn_area"].astype(str)
+top_a["Название"] = top_a["ogrn_area"].apply(lambda x: area_map.get(str(x), "—"))
+top_a["Нарушений"] = top_a["violations"]
+st.dataframe(top_a[["Название", "ОГРН", "Нарушений"]], use_container_width=True, hide_index=True)
 
 st.divider()
 
